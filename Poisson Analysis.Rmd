@@ -1,0 +1,282 @@
+---
+title: "Poisson Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(matrixStats)
+```
+First we shall load and merge all our data.
+```{r}
+prem2020_21 <- read.csv("prem2020-21.csv")
+prem2020_21_ods<- prem2020_21
+prem2020_21<-data.frame(Date=prem2020_21$Date,HomeTeam=prem2020_21$HomeTeam,AwayTeam=prem2020_21$AwayTeam,FTHG=prem2020_21$FTHG,FTAG=prem2020_21$FTAG)
+
+prem2019_20 <- read.csv("prem2019-20.csv")
+prem2019_20<-data.frame(Date=prem2019_20$Date,HomeTeam=prem2019_20$HomeTeam,AwayTeam=prem2019_20$AwayTeam,FTHG=prem2019_20$FTHG,FTAG=prem2019_20$FTAG)
+
+prem2018_19 <- read.csv("prem2018-19.csv")
+prem2018_19 <- data.frame(Date=prem2018_19$Date,HomeTeam=prem2018_19$HomeTeam,AwayTeam=prem2018_19$AwayTeam,FTHG=prem2018_19$FTHG,FTAG=prem2018_19$FTAG)
+
+prem2017_18 <- read.csv("prem2017-18.csv")
+prem2017_18 <- data.frame(Date=prem2017_18$Date,HomeTeam=prem2017_18$HomeTeam,AwayTeam=prem2017_18$AwayTeam,FTHG=prem2017_18$FTHG,FTAG=prem2017_18$FTAG)
+
+prem2016_17 <- read.csv("prem2016-17.csv")
+prem2016_17 <- data.frame(Date=prem2016_17$Date,HomeTeam=prem2016_17$HomeTeam,AwayTeam=prem2016_17$AwayTeam,FTHG=prem2016_17$FTHG,FTAG=prem2016_17$FTAG)
+
+prem2015_16 <- read.csv("prem2015-16.csv")
+prem2015_16 <- data.frame(Date=prem2015_16$Date,HomeTeam=prem2015_16$HomeTeam,AwayTeam=prem2015_16$AwayTeam,FTHG=prem2015_16$FTHG,FTAG=prem2015_16$FTAG)
+
+fulldf<-rbind(prem2015_16,prem2016_17,prem2017_18,prem2018_19,prem2019_20,prem2020_21)
+```
+Next we find all the teams which have games included in our data set as well as defining $tn$ as the total number of teams.
+```{r}
+fullteams<-function(dt){
+  gamenumber<-length(dt$HomeTeam)
+  teams <- vector()
+  for (i in 1:gamenumber){
+    if (dt$HomeTeam[i] %in% teams==FALSE){
+      teams <- append(teams, dt$HomeTeam[i])
+      }
+  }
+  return(teams)
+  }
+fullteamlist<-sort(fullteams(fulldf))
+tn<-length(fullteamlist)
+```
+Now we define the vector monthd. This contains the number of days in each month.
+```{r}
+monthd<-c(31,28,31,30,31,30,31,31,30,31,30,31)
+```
+As our weighting function uses $t$ in units of days back we need to define a function that, using the date a match took place on and the date on which we are predicting each team's strength, can calculate how many days back a match took place.
+```{r}
+datetodays<-function(date){
+  year<-as.numeric(substr(date,7,10))
+  month<-as.numeric(substr(date,4,5))
+  day<-as.numeric(substr(date,1,2))
+  yeardays<-365*(year-1)
+  monthdays<-0
+  for (i in 1:month){
+    monthdays<-monthdays+monthd[i]
+  }
+  if (year==2020){
+    if (month>1){
+      monthdays<-monthdays+1
+    }
+  }
+  days<-day+monthdays+yeardays
+  return(days)
+  }
+fulldf
+```
+We now convert our dataframe so it only involves the relevant information.
+```{r}
+converted<-function(dt){
+  teams<-fullteams(dt)
+  n<-length(teams)
+  gn<-length(dt$HomeTeam)
+  finaldate<-dt$Date[gn]
+  finaldays<-datetodays(finaldate)
+  TeamWins<-data.frame(Date=character(0),HomeTeam=character(0),AwayTeam=character(0),HomeGoals=integer(0),AwayGoals=integer(0),DaysBack=integer(0))
+  for (i in 1:gn){
+    Date<-dt$Date[i]
+    HomeTeam<-dt$HomeTeam[i]
+    AwayTeam<-dt$AwayTeam[i]
+    HomeGoals <- dt$FTHG[i]
+    AwayGoals <- dt$FTAG[i]
+    DaysBack<-finaldays-datetodays(dt$Date[i])
+    gameresult<-data.frame(Date,HomeTeam, AwayTeam, HomeGoals, AwayGoals, DaysBack)
+    TeamWins<- rbind(TeamWins, gameresult)
+    }
+  return(TeamWins)
+}
+dtfrd<-converted(fulldf)
+dtfrd
+```
+As we will need to restimate the statistical parameters every half week to ensure our estimations are up to date we will now code a way to select all the matches before a specific date and also the first five matches after a specific date. This is because, for each round of estimations, we will use all previous data to make these estimations. We then will use these estimations to predict the next five matches as the next five matches account for one half week of matches. 
+```{r}
+priorgames<-function(df,gwback){
+  gn<-length(df$Date)
+  countback<-gn+1-(5*gwback)
+  beforedf<-df
+  beforedf<-beforedf[-(countback:gn), ]
+  beforedf$DaysBack<-beforedf$DaysBack - (df$DaysBack[countback])
+  return(beforedf)
+}
+
+aftergames<-function(df,gwback){
+  gn<-length(df$Date)
+  countback<-gn-(5*gwback)
+  afterdf<-df
+  afterdf<-afterdf[((countback+1):(countback+5)), ]
+  return(afterdf)
+}
+```
+Here we code our function tal as defined in our main project.
+```{r}
+tal<-function(x,y,tlamda,tmu,trho){
+  if((x==0) & (y==0)){
+    result<-(1-(tlamda * tmu * trho))
+  } 
+  else if((x==0) & (y==1)){
+    result<-(1+(tlamda * trho))
+  }
+  else if((x==1) & (y==0)){
+    result<-(1+(tmu*trho))
+  }
+  else if((x==1) & (y==1)){
+    result<-(1-(trho))
+  }
+  else{
+    result<-(1)
+  }
+  return(result)
+}
+
+```
+We now code our log-likelihood function that takes in account home advantage and draws. This is $$\ell{(({\alpha}, {\beta}, \gamma) } = \sum_{k=1}^{z}\ln{(\tau_{\lambda, \mu}(x_{k}, y_{k}))} -(\lambda_{k} + \mu_{k}) + x_{k}\ln{(\lambda_{k})} + y_{k}\ln{(\mu_{k})} - ln{(x_{k}!)} - ln{(y_{k}!)}$$ where  $\lambda_{k}=-\alpha_{i(k)}\beta_{j(k)}\gamma$ and $\mu_{k}=-\alpha_{j(k)}\beta_{i(k)}$. We define the attack strength of the last team to be 1. We now use the optim function to find our maximum likelihood estimators.
+```{r}
+MLE<-function(eps,df){
+  dc<-eps
+  n<-length(df$HomeTeam)
+  tn<-length(fullteamlist)
+  likelihood2<-function(theta){
+    n<-length(df$HomeTeam)
+    alpha2<-c(theta[1:(tn-1)],1)
+    beta2<-theta[(tn):((2*tn)-1)]
+    gamma2<-theta[(2*tn)]
+    rho<-(theta[((2*tn)+1)])
+    value<-0
+    for (i in 1:n){
+      teami <- which(fullteamlist==df$HomeTeam[i]) #selecting home team
+      teamj <- which(fullteamlist==df$AwayTeam[i]) #selecting away team
+      Days<-df$DaysBack[i]
+      decay<-exp(-(dc*Days))
+      x<- df$HomeGoals[i]
+      y<- df$AwayGoals[i]
+      alamda<-exp(alpha2[teami]+beta2[teamj]+gamma2)
+      amu<-exp(alpha2[teamj]+beta2[teami])
+      talbit<-log(tal(x,y,alamda,amu,rho)) #goes wrong here because log negative
+      first<- -(alamda+amu)
+      lognumerator <- (x*log(alamda)) + (y*log(amu))
+      logdenominator <- lfactorial(x)+lfactorial(y)
+      singleprob<-talbit+(first+lognumerator)-logdenominator
+      value<-value+(decay*singleprob)
+    }
+    return(value)
+  }
+  
+  
+  alphaq<-c(rep(1,(tn-1)))
+  betaq<-c(rep(-1,tn))
+  gammaq<-0.5
+  rhoq<- -0.01
+  lowlim<-c(rep(-1000,((2*tn))),-0.3)
+  strengthDH<-optim(theta <- c(alphaq,betaq,gammaq,rhoq), likelihood2, method="L-BFGS-B",lower=lowlim, control=list(fnscale=-1))
+  
+  test<-(strengthDH$par)
+  talpha<-c(test[1:(tn-1)],1)
+  tbeta<-(test[(tn):((2*tn)-1)])
+  tgamma<-(test[((2*tn))])
+  trho<-test[((2*tn)+1)]
+  return(c(talpha,tbeta,tgamma,trho))
+}
+```
+
+We now code the function winprob that finds the probability of each possible results (home win, away win, draw) for an individual match.
+```{r}
+winprob<-function(hteam,ateam,MLEs){
+  iteam<-which(fullteamlist==hteam)
+  jteam<-which(fullteamlist==ateam)
+  hattack<-MLEs[iteam]
+  aattack<-MLEs[jteam]
+  hdefense<-MLEs[(tn+iteam)]
+  adefense<-MLEs[(tn+jteam)]
+  bgamma<-MLEs[((2*tn)+1)]
+  brho<-MLEs[((2*tn)+2)]
+  maxgoals<-10
+  hmean<-exp(hattack+adefense+bgamma)
+  amean<-exp(hdefense+aattack)
+  hprob<-0
+  aprob<-0
+  dprob<-0
+  for (i in 0:maxgoals){
+    dprob<-dprob + tal(i,i,hmean,amean,brho)*dpois(i,hmean)*dpois(i,amean)
+    for (j in (i+1):(maxgoals+1)){
+      hprob<-hprob + tal(j,i,hmean,amean,brho)*dpois(j,hmean)*dpois(i,amean)
+      aprob<-aprob + tal(i,j,hmean,amean,brho)*dpois(i,hmean)*dpois(j,amean)
+    }
+  }
+  return(c(hprob,dprob,aprob))
+}
+```
+The following function works out the result of an individual match by comparing the number of goals each team has scored.
+```{r}
+trueresult<-function(df){
+  hg<-df$HomeGoals
+  ag<-df$AwayGoals
+  if (hg>ag){
+    result<-1
+  }
+  else if (hg==ag){
+    result<-0
+  }
+  else {
+    result<- -1
+  }
+}
+```
+The next function works out the log-probabilities found by the model for the correct results.
+```{r}
+logprobsingle<-function(True,probabilities){
+  if (True==1){
+    logpk<-log(probabilities[1])
+  }
+  if (True==0){
+    logpk<-log(probabilities[2])
+  }
+  if (True==-1){
+    logpk<-log(probabilities[3])
+  }
+  return(logpk)
+}
+```
+We now combine all our functions we have defined. We estimate the statistical parameters for each half week. After this we find the probabilities and predict the results of the matches in the following 5 matches of the data (we predict the results of the matches in each half week). We will then see how successful our predictions are. We do this by seeing how many predicitons we got right as well as find the value of $\kappa$ when we use our model. We use $\epsilon=0.0025$ as we have previously found this to be the optimum value of $\epsilon$ that maximises $\kappa$.
+```{r}
+seasonpredictors<-function(eps,df,gwback){
+  logprob<-0
+  tn<-length(fullteamlist)
+  correctpredictions<-0
+  num_games<-0
+  pred_draws<-0
+  num_draws<-0
+  possresults<-c(1,0,-1)
+  for (i in 1:gwback){
+    before<-priorgames(df,i)
+    after<-aftergames(df,i)
+    MLEs<-MLE(eps,before)
+    for (j in 1:5){
+      num_games<-num_games+1
+      prediction<-winprob(after$HomeTeam[j],after$AwayTeam[j],MLEs)
+      ourprediction=possresults[which(prediction==max(prediction))]
+      true_result<-trueresult(after[j,])
+      logprob<-logprob+logprobsingle(true_result,prediction)
+      if (ourprediction==true_result){
+        correctpredictions<-correctpredictions+1
+      }
+      if (ourprediction==0){
+        pred_draws<-pred_draws+1
+      }
+      if (true_result==0){
+        num_draws<-num_draws+1
+      }
+    }
+  }
+  return(c(correctpredictions,num_games,pred_draws,num_draws,logprob))  
+}
+
+seasonpredictors(0.0025,dtfrd,30)
+```
+
+

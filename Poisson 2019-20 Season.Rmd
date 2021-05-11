@@ -1,0 +1,207 @@
+---
+title: "final poisson hopefully"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(matrixStats)
+```
+
+First we shall load and merge all our data.
+
+```{r}
+prem2019_20 <- read.csv("prem2019-20.csv")
+prem2019_20<-data.frame(Date=prem2019_20$Date,HomeTeam=prem2019_20$HomeTeam,AwayTeam=prem2019_20$AwayTeam,FTHG=prem2019_20$FTHG,FTAG=prem2019_20$FTAG)
+
+fulldf<-rbind(prem2019_20)
+fulldf
+```
+Next we find all the teams which have games included in our data set as well as defining $tn$ as the total number of teams.
+
+```{r}
+fullteams<-function(dt){
+  gamenumber<-length(dt$HomeTeam)
+  teams <- vector()
+  for (i in 1:gamenumber){
+    if (dt$HomeTeam[i] %in% teams==FALSE){
+      teams <- append(teams, dt$HomeTeam[i])
+      }
+  }
+  return(teams)
+  }
+fullteamlist<-sort(fullteams(fulldf))
+tn<-length(fullteamlist)
+```
+
+Now we define the vector monthd. This contains the number of days in each month.
+
+```{r}
+monthd<-c(31,28,31,30,31,30,31,31,30,31,30,31)
+```
+
+As our weighting function uses $t$ in units of days back we need to define a function that, using the date a match took place on and the date on which we are predicting each team's strength, can calculate how many days back a match took place.
+
+```{r}
+datetodays<-function(date){
+  year<-as.numeric(substr(date,7,10))
+  month<-as.numeric(substr(date,4,5))
+  day<-as.numeric(substr(date,1,2))
+  yeardays<-365*(year-1)
+  monthdays<-0
+  for (i in 1:month){
+    monthdays<-monthdays+monthd[i]
+  }
+  if (year==2020){
+    if (month>1){
+      monthdays<-monthdays+1
+    }
+  }
+  days<-day+monthdays+yeardays
+  return(days)
+  }
+```
+
+We now convert our dataframe so it only involves the relevant information.
+
+```{r}
+converted<-function(dt){
+  teams<-fullteams(dt)
+  n<-length(teams)
+  gn<-length(dt$HomeTeam)
+  finaldate<-dt$Date[gn]
+  TeamWins<-data.frame(Date=character(0),HomeTeam=character(0),AwayTeam=character(0),HomeGoals=integer(0),AwayGoals=integer(0))
+  for (i in 1:gn){
+    Date<-dt$Date[i]
+    HomeTeam<-dt$HomeTeam[i]
+    AwayTeam<-dt$AwayTeam[i]
+    HomeGoals <- dt$FTHG[i]
+    AwayGoals <- dt$FTAG[i]
+    gameresult<-data.frame(Date,HomeTeam, AwayTeam, HomeGoals, AwayGoals)
+    TeamWins<- rbind(TeamWins, gameresult)
+    }
+  return(TeamWins)
+}
+dtfrd<-converted(fulldf)
+dtfrd
+```
+As we will need to re-estimate the statistical parameters every half week to ensure our estimations are up to date we will now code a way to select all the matches before a specific date and also the first five matches after a specific date. This is because, for each round of estimations, we will use all previous data to make these estimations. We then will use these estimations to predict the next five matches as the next five matches account for one half week of matches. 
+
+```{r}
+priorgames<-function(df,gwback){
+  gn<-length(df$Date)
+  countback<-gn+1-(5*gwback)
+  beforedf<-df
+  beforedf<-beforedf[-(countback:gn), ]
+  beforedf$DaysBack<-beforedf$DaysBack - (df$DaysBack[countback])
+  return(beforedf)
+}
+
+aftergames<-function(df,gwback){
+  gn<-length(df$Date)
+  countback<-gn-(5*gwback)
+  afterdf<-df
+  afterdf<-afterdf[((countback+1):(countback+5)), ]
+  return(afterdf)
+}
+```
+
+Here we code our function tal as defined in our main project.
+
+```{r}
+tal<-function(x,y,tlamda,tmu,trho){
+  if((x==0) & (y==0)){
+    result<-(1-(tlamda * tmu * trho))
+  } 
+  else if((x==0) & (y==1)){
+    result<-(1+(tlamda * trho))
+  }
+  else if((x==1) & (y==0)){
+    result<-(1+(tmu*trho))
+  }
+  else if((x==1) & (y==1)){
+    result<-(1-(trho))
+  }
+  else{
+    result<-(1)
+  }
+  return(result)
+}
+
+```
+
+We now code our log-likelihood function that takes in account home advantage and draws. This is $$ \ell{(({\alpha}, {\beta}, \gamma)}=\sum_{k=1}^{z} \ln{(\tau_{\lambda, \mu}(x_{k},y_{k}))}-(\lambda_{k}+\mu_{k})+x_{k}\ln{(\lambda_{k})}+y_{k}\ln{(\mu_{k})} - ln{(x_{k}!)} - ln{(y_{k}!)}$$ where  $\lambda_{k}=-\alpha_{i(k)}\beta_{j(k)}\gamma$ and $\mu_{k}=-\alpha_{j(k)}\beta_{i(k)}$. We define the attack strength of the last team to be 1. 
+
+```{r}
+likelihood<-function(theta){
+  n<-length(dtfrd$HomeTeam)
+  alpha2<-c(theta[1:(tn-1)],1)
+  beta2<- -(theta[(tn):(2*tn-1)])
+  gamma2<-(theta[((2*tn))])
+  rho<-(theta[((2*tn)+1)])
+  value<-0
+  for (i in 1:n){
+    teami <- which(fullteamlist==dtfrd$HomeTeam[i]) #selecting home team
+    teamj <- which(fullteamlist==dtfrd$AwayTeam[i]) #selecting away team
+    x<- dtfrd$HomeGoals[i]
+    y<- dtfrd$AwayGoals[i]
+    alamda<-exp(alpha2[teami]+beta2[teamj]+gamma2)
+    amu<-exp(alpha2[teamj]+beta2[teami])
+    talbit<-log(tal(x,y,alamda,amu,rho))
+    first<- -(alamda+amu)
+    lognumerator <- (x*log(alamda)) + (y*log(amu))
+    logdenominator <- lfactorial(x)+lfactorial(y)
+    singleprob<-talbit+(first+lognumerator)-logdenominator
+    value<-value+singleprob
+  }
+  return(value)
+}
+```
+
+We now use the optim function with fnscale=-1 to find our maximum likelihood estimators.
+
+```{r}
+alphaq<-c(rep(1,(tn-1)))
+betaq<-c(rep(-1,tn))
+gammaq<-0.5
+rhoq<- -0.01
+lowlim<-c(rep(-1000,((2*tn))),-0.3)
+strengthDH<-optim(theta <- c(alphaq,betaq,gammaq,rhoq), likelihood ,method="L-BFGS-B",lower=lowlim, control=list(fnscale=-1),hessian=TRUE)
+```
+
+We now use the hessian matrix the calculate the fisher-information matrix. Then, using this, we calculate the corresponding standard-errors and confidence-intervals for each statistical 
+parameter.
+
+```{r}
+mles<-c(strengthDH$par[1:(tn-1)],1,strengthDH$par[tn:(2*tn+1)])
+fullnames<-c(fullteamlist,fullteamlist,"gamma","rho")
+fisher_info<-solve(-strengthDH$hessian)
+prop_sigma<-sqrt(diag(fisher_info))
+standarderrors<-c(prop_sigma[1:(tn-1)],"N/A",prop_sigma[tn:(2*tn+1)])
+interval<-(data.frame(parameters=fullnames,MLE=mles, S.E=standarderrors))
+alphaCI<-interval[1:(tn),]
+betaCI<-interval[(tn+1):((2*tn)),]
+gammaCI<-interval[((2*tn+1)),]
+rhoCI<-interval[(2*tn+2),]
+```
+
+```{r}
+alphaCI[order(alphaCI$MLE),]
+```
+
+```{r}
+betaCI[order(betaCI$MLE),]
+```
+
+```{r}
+gammaCI
+```
+
+```{r}
+rhoCI
+```
+
+
+
+
+

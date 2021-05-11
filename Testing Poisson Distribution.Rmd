@@ -1,0 +1,72 @@
+---
+title: "Testing Poisson Distribution"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(matrixStats)
+library('ggplot2')
+```
+
+First we shall load and merge all our data.
+
+```{r}
+prem2019_20 <- read.csv("prem2019-20.csv")
+prem2019_20<-data.frame(Date=prem2019_20$Date,HomeTeam=prem2019_20$HomeTeam,AwayTeam=prem2019_20$AwayTeam,FTHG=prem2019_20$FTHG,FTAG=prem2019_20$FTAG)
+
+fulldf<-rbind(prem2019_20)
+fulldf
+```
+
+We now find the mean number of goals scored by the home and away team.
+
+```{r}
+homegoals<-fulldf$FTHG
+awaygoals<-fulldf$FTAG
+
+home<-mean(homegoals)
+home
+away<-mean(awaygoals)
+away
+```
+We now define a function that finds the estimate proportion of matches with each possible scoreline. It does this using the function dpois with the required mean (either the mean number of home goals per match or the mean number of away goals per match) to find the probability that a certain number of goals has been scored.
+
+```{r}
+estimproportion<-matrix( rep( 0, len=12), nrow = 2)
+for (i in 0:5){
+  estimproportion[1,i+1]<-dpois(i,home)
+  estimproportion[2,i+1]<-dpois(i,away)
+  hprob<-c(hprob,dpois(i,home))
+  aprob<-c(aprob,dpois(i,away))
+}
+estimproportion
+```
+
+
+We now define a function that finds the true proportions of home and away goals. It does this by counting how many times each possible number of home and away goals occurs and then dividing it by the total number of games.
+
+```{r}
+proportion<-function(homegoals,awaygoals){
+  n<-length(homegoals)
+  proportion<-matrix( rep( 0, len=20), nrow = 2)
+  for (i in 1:n){
+    h<-homegoals[i]
+    a<-awaygoals[i]
+    proportion[1,h+1]<-proportion[1,(h+1)]+1
+    proportion[2,a+1]<-proportion[2,(a+1)]+1
+  }
+  proportion<-proportion/n
+  return(proportion)
+}
+trueprop<-proportion(homegoals,awaygoals)
+trueprop
+```
+
+We can see that the estimated and true proportions are very similar. We shall plot these in a graph to help visualize this. The graph has been plotted in the main report.
+
+
+
+
+
+

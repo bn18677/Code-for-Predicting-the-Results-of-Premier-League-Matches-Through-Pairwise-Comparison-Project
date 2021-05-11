@@ -1,0 +1,119 @@
+---
+title: "tal stuff"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(matrixStats)
+```
+
+First we shall load and merge all our data.
+
+```{r}
+prem2019_20 <- read.csv("prem2019-20.csv")
+prem2019_20<-data.frame(Date=prem2019_20$Date,HomeTeam=prem2019_20$HomeTeam,AwayTeam=prem2019_20$AwayTeam,FTHG=prem2019_20$FTHG,FTAG=prem2019_20$FTAG)
+
+prem2018_19 <- read.csv("prem2018-19.csv")
+prem2018_19 <- data.frame(Date=prem2018_19$Date,HomeTeam=prem2018_19$HomeTeam,AwayTeam=prem2018_19$AwayTeam,FTHG=prem2018_19$FTHG,FTAG=prem2018_19$FTAG)
+
+prem2017_18 <- read.csv("prem2017-18.csv")
+prem2017_18 <- data.frame(Date=prem2017_18$Date,HomeTeam=prem2017_18$HomeTeam,AwayTeam=prem2017_18$AwayTeam,FTHG=prem2017_18$FTHG,FTAG=prem2017_18$FTAG)
+
+prem2016_17 <- read.csv("prem2016-17.csv")
+prem2016_17 <- data.frame(Date=prem2016_17$Date,HomeTeam=prem2016_17$HomeTeam,AwayTeam=prem2016_17$AwayTeam,FTHG=prem2016_17$FTHG,FTAG=prem2016_17$FTAG)
+
+prem2015_16 <- read.csv("prem2015-16.csv")
+prem2015_16 <- data.frame(Date=prem2015_16$Date,HomeTeam=prem2015_16$HomeTeam,AwayTeam=prem2015_16$AwayTeam,FTHG=prem2015_16$FTHG,FTAG=prem2015_16$FTAG)
+
+prem2014_15 <- read.csv("prem2014-15.csv")
+prem2014_15 <- data.frame(Date=prem2014_15$Date,HomeTeam=prem2014_15$HomeTeam,AwayTeam=prem2014_15$AwayTeam,FTHG=prem2014_15$FTHG,FTAG=prem2014_15$FTAG)
+prem2014_15<-prem2015_16[1:380,]
+
+prem2013_14 <- read.csv("prem2013-14.csv")
+prem2013_14 <- data.frame(Date=prem2013_14$Date,HomeTeam=prem2013_14$HomeTeam,AwayTeam=prem2013_14$AwayTeam,FTHG=prem2013_14$FTHG,FTAG=prem2013_14$FTAG)
+
+prem2012_13 <- read.csv("prem2012-13.csv")
+prem2012_13 <- data.frame(Date=prem2012_13$Date,HomeTeam=prem2012_13$HomeTeam,AwayTeam=prem2012_13$AwayTeam,FTHG=prem2012_13$FTHG,FTAG=prem2012_13$FTAG)
+
+prem2011_12 <- read.csv("prem2011-12.csv")
+prem2011_12 <- data.frame(Date=prem2011_12$Date,HomeTeam=prem2011_12$HomeTeam,AwayTeam=prem2011_12$AwayTeam,FTHG=prem2011_12$FTHG,FTAG=prem2011_12$FTAG)
+
+prem2010_11 <- read.csv("prem2010-11.csv")
+prem2010_11 <- data.frame(Date=prem2010_11$Date,HomeTeam=prem2010_11$HomeTeam,AwayTeam=prem2010_11$AwayTeam,FTHG=prem2010_11$FTHG,FTAG=prem2010_11$FTAG)
+
+prem2009_10 <- read.csv("prem2009-10.csv")
+prem2009_10 <- data.frame(Date=prem2009_10$Date,HomeTeam=prem2009_10$HomeTeam,AwayTeam=prem2009_10$AwayTeam,FTHG=prem2009_10$FTHG,FTAG=prem2009_10$FTAG)
+
+prem2008_09 <- read.csv("prem2008-09.csv")
+prem2008_09 <- data.frame(Date=prem2008_09$Date,HomeTeam=prem2008_09$HomeTeam,AwayTeam=prem2008_09$AwayTeam,FTHG=prem2008_09$FTHG,FTAG=prem2008_09$FTAG)
+
+prem2007_08 <- read.csv("prem2007-08.csv")
+prem2007_08 <- data.frame(Date=prem2007_08$Date,HomeTeam=prem2007_08$HomeTeam,AwayTeam=prem2007_08$AwayTeam,FTHG=prem2007_08$FTHG,FTAG=prem2007_08$FTAG)
+prem2007_08<-prem2007_08
+
+prem2006_07 <- read.csv("prem2006-07.csv")
+prem2006_07 <- data.frame(Date=prem2006_07$Date,HomeTeam=prem2006_07$HomeTeam,AwayTeam=prem2006_07$AwayTeam,FTHG=prem2006_07$FTHG,FTAG=prem2006_07$FTAG)
+
+prem2005_06 <- read.csv("prem2005-06.csv")
+prem2005_06 <- data.frame(Date=prem2005_06$Date,HomeTeam=prem2005_06$HomeTeam,AwayTeam=prem2005_06$AwayTeam,FTHG=prem2005_06$FTHG,FTAG=prem2005_06$FTAG)
+
+fulldf<-rbind(prem2005_06,prem2006_07,prem2007_08,prem2008_09,prem2009_10,prem2010_11,prem2011_12,prem2012_13,prem2013_14,prem2014_15,prem2015_16,prem2016_17,prem2017_18,prem2018_19)
+fulldf
+```
+
+We now find the mean number of goals scored by the home and away team.
+
+```{r}
+homegoals<-fulldf$FTHG
+awaygoals<-fulldf$FTAG
+
+home<-mean(homegoals)
+home
+away<-mean(awaygoals)
+away
+```
+
+We now define a function that finds the true proportion of matches with each possible scoreline. It does this by counting how many times each possible scoreline occurs and then dividing it by the total number of games.
+
+```{r}
+proportion<-function(homegoals,awaygoals){
+  n<-length(homegoals)
+  proportion<-matrix( rep( 0, len=100), nrow = 10)
+  for (i in 1:n){
+    h<-homegoals[i]
+    a<-awaygoals[i]
+    proportion[(h+1),(a+1)]<-proportion[(h+1),(a+1)]+1
+  }
+  proportion<-proportion/n
+  return(proportion)
+}
+trueprop<-proportion(homegoals,awaygoals)
+```
+
+We now define a function that finds the estimated proportion of matches with each possible scoreline (up to ten goals). It does this by using the using the poisson distributions with the expected number of home and away goals to calculate the probability of each possible scoreline.
+
+```{r}
+predprop<-function(hmean,amean){
+  predicted<-matrix( rep( 0, len=100), nrow = 10)
+  for (i in 1:10){
+    for (j in 1:10){
+      hprob<-dpois((i-1),hmean)
+      aprob<-dpois((j-1),amean)
+      predicted[i,j]<-hprob*aprob
+    }
+  }
+  return(predicted)
+}
+pred<-predprop(home,away)
+```
+
+We now find the matrix containing values corresponding the the true proportion for each score line minus the predicted proportion for each scoreline.
+
+```{r}
+trueprop-pred
+```
+
+
+
+

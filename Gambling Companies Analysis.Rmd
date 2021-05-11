@@ -1,0 +1,104 @@
+---
+title: "new gambling companies"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(matrixStats)
+```
+First we shall load our data.
+```{r}
+prem2020_21 <- read.csv("prem2020-21.csv")
+prem2020_21
+```
+Nexy we create a vector containing all the names of gambling companies for which we have odds provided for the 20-21 Premier-League season. 
+```{r}
+companies<-c("Bet365","Bet&Win","Interwetten","Pinnacle","William Hill","VC Bet","Max Odds", "Average Odds")
+```
+The next function works out the log-probabilities found by the model for the correct results.
+```{r}
+logprobsingle<-function(True,probabilities){
+  if (True=="H"){
+    logpk<-log(probabilities[1])
+  }
+  if (True=="D"){
+    logpk<-log(probabilities[2])
+  }
+  if (True=="A"){
+    logpk<-log(probabilities[3])
+  }
+  return(logpk)
+}
+```
+Next we define a function that converts the odds provided by the gambling companies into probabilities. 
+```{r}
+oddstoprobs<-function(alpha3){
+  total<-1/alpha3
+  return(total)
+}
+```
+The following function takes a vector and converts it so the sum of its elements is one. This will be used to ensure that the probabilities  provided by the gambling companies equals 1. 
+```{r}
+sum1<-function(alpha3){
+  total<-sum(alpha3)
+  multiplier<-1/total
+  final<-alpha3*multiplier
+  return(final)
+}
+```
+The following function combines all the functions we have defined. It takes the odds given by each gambling company for each game and converts these to probabilities. It then predicts whichever option has the highest probabilities(shortest odds). We will then see how successful our predictions are. We do this by seeing how many predicitons we got right as well as find the value of $\kappa$ when we use our model. 
+```{r}
+bettingpredictors<-function(df,gback,company){
+  gn<-length(df$FTR)
+  logprob<-0
+  Hodd<-df[,(25+(3*(company-1)))]
+  Dodd<-df[,(25+(3*(company-1))+1)]
+  Aodd<-df[,(25+(3*(company-1))+2)]
+  correctpredictions<-0
+  num_games<-0
+  pred_draws<-0
+  num_draws<-0
+  num_unpredicted<-0
+  possresults<-c("H","D","A")
+  for (i in 0:(gback-1)){
+    num_games<-num_games+1
+    Result<-df$FTR[gn-i]
+    odds<-c(Hodd[gn-i],Dodd[gn-i],Aodd[gn-i])
+    probabilities<-sum1(oddstoprobs(odds))
+    ourprediction=possresults[which(probabilities==max(probabilities))]
+    logprob<-logprob + logprobsingle(Result,probabilities)
+    if (length(ourprediction)>1){
+      num_unpredicted=num_unpredicted+1
+      next
+    }
+    if (ourprediction==Result){
+      correctpredictions<-correctpredictions+1
+    }
+  }
+  return(c(num_games,correctpredictions,num_unpredicted,logprob))  
+}
+```
+
+```{r}
+gamblingcomparison<-data.frame(Company=character(0),NumberOfGames=integer(0),CorrectPredictions=integer(0),NumberUnpredicted=integer(0),LogProb=integer(0))
+for (i in (1:(length(companies)))){
+  Company<-companies[i]
+  analysis<-bettingpredictors(prem2020_21,150,i)
+  NumberOfGames<-analysis[1]
+  CorrectPredictions<-analysis[2]
+  NumberUnpredicted<-analysis[3]
+  LogProb<-analysis[4]
+  analysisdf<-data.frame(Company,NumberOfGames,CorrectPredictions,NumberUnpredicted,LogProb)
+  gamblingcomparison<-rbind(gamblingcomparison,analysisdf)
+}
+
+gamblingcomparison
+```
+
+
+
+
+
+
+

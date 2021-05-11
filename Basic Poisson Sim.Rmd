@@ -1,0 +1,150 @@
+---
+title: "Basic Poisson Sim"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(matrixStats)
+```
+
+First we define the names of each team as well as the attacking strengths, defensive strengths and the home constant. We also define a function that returns the team we want from the number in appears in the list. Then we define $tn$ as the total number of teams
+
+```{r}
+names<-c("Ta1","Ta2","Ta3","Ta4","Ta5","Ta6","Ta7","Ta8","Ta9","Taten","Tb1","Tb2","Tb3","Tb4","Tb5","Tb6","Tb7","Tb8","Tb9","Tbten")  #defining the names for each team
+namesb<-c("Ta1 attack","Ta2 attack","Ta3 attack","Ta4 attack","Ta5 attack","Ta6 attack","Ta7 attack","Ta8 attack","Ta9 attack","Taten attack","Tb1 attack","Tb2 attack","Tb3 attack","Tb4 attack","Tb5 attack","Tb6 attack","Tb7 attack","Tb8 attack","Tb9 attack","Ta1 defense","Ta2 defense","Ta3 defense","Ta4 defense","Ta5 defense","Ta6 defense","Ta7 defense","Ta8 defense","Ta9 defense","Taten defense","Tb1 defense","Tb2 defense","Tb3 defense","Tb4 defense","Tb5 defense","Tb6 defense","Tb7 defense","Tb8 defense","Tb9 defense","Tbten defense","Home Advantage") #defining the names for each statistical paramter accept the final team's attack strength
+alpha<-c(0.525,0.575,0.625,0.675,0.725,0.775,0.825,0.875,0.925,0.975,1.025,1.075,1.125,1.175,1.225,1.275,1.325,1.375,1.425,1.475)
+Talpha<-c(0.525,0.575,0.625,0.675,0.725,0.775,0.825,0.875,0.925,0.975,1.025,1.075,1.125,1.175,1.225,1.275,1.325,1.375,1.425)
+beta<-c(0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,1,1.05,1.1,1.15,1.2,1.25,1.3,1.35,1.4,1.45,1.5)
+gamma<-0.2
+words<-function(i){   #a function that returns the team we want
+  a<-names
+  return(a[i])
+}
+tn<-length(names)
+```
+
+We define the Poisson model and find the function which allows us to simulate one match. Our mean log-goals for the home team is equal to $\exp(\alpha_{i} + \beta_{j} + \gamma)$ and our mean log-goals for the away team is $\exp(\alpha_{j} + \beta_{i})$ where $i,j$ correspond to home and away team respectively.
+
+```{r}
+POIM<-function(i,j,alpha1,beta1,gamma1){
+  HomeTeam <- c(words(i)) #selecting home team
+  AwayTeam <-c(words(j)) #selecting away team
+  ai<-alpha1[i]#attack strength of team i
+  aj<-alpha1[j]#attack strength of team j
+  bi<- -beta1[i]#defense strength of team i
+  bj<- -beta1[j]#defense strength of team j
+  h<-gamma1 #home advantage
+  lamda<-exp(ai+bj+h)
+  mu<-exp(aj+bi)
+  HomeGoals<-rpois(1,lamda)
+  AwayGoals<-rpois(1,mu)
+  wins.data <- data.frame(HomeTeam, AwayTeam, HomeGoals, AwayGoals) #putting the result of the match in a data frame
+  return(wins.data)
+}
+```
+
+Next we simulate all the matches in a season. We do this by running 10 home games and 10 away games for each pair of teams using the previously defined function dgamesimulator. We then use rbind to merge the results into one data frame so we have a data frame, dtfr, containing the results of every game in the season.
+
+```{r}
+allsim<-function(alpha1,beta1,gamma1){
+  TeamWins<-data.frame(Team1=character(0),Team2=character(0),Homegoals=integer(0),Awaygoals=integer(0))
+  for (i in 1:tn){ 
+    for (j in 1:tn){
+      if ((i!=j)){ #as a team cannot play itself
+        game1<-POIM(i,j,alpha1,beta1,gamma1)
+        game2<-POIM(i,j,alpha1,beta1,gamma1)
+        game3<-POIM(i,j,alpha1,beta1,gamma1)
+        game4<-POIM(i,j,alpha1,beta1,gamma1)
+        game5<-POIM(i,j,alpha1,beta1,gamma1)
+        game6<-POIM(i,j,alpha1,beta1,gamma1)
+        game7<-POIM(i,j,alpha1,beta1,gamma1)
+        game8<-POIM(i,j,alpha1,beta1,gamma1)
+        game9<-POIM(i,j,alpha1,beta1,gamma1)
+        game10<-POIM(i,j,alpha1,beta1,gamma1)
+      TeamWins <- rbind(TeamWins, game1,game2,game3,game4,game5,game6,game7,game8,game9,game10)
+      }
+    }
+  }
+  return(TeamWins)
+}
+```
+
+Again, as previously done, we simulate the season.
+
+```{r}
+dtfr<-allsim(alpha,beta,gamma)
+dtfr
+```
+Now we define the probability for a score (x,y)
+
+```{r}
+prob<-function(x,y,lamda,mu){
+  hprob<-((exp(-lamda))*(lamda^(x)))/(factorial(x))
+  aprob<-((exp(-mu))*(mu^(y)))/(factorial(y))
+  totalprob<-hprob*aprob
+  return(totalprob)
+}
+```
+
+Here we define the log-likelihood function, $\sum_{k=1}^{z} -(\lambda_{k} + \mu_{k}) + x\ln{(\lambda_{k})} + y\ln{(\mu_{k})} - ln{(x!)} - ln{(y!)}$. We set the attack strength of the final team to be their true attack strength.
+```{r}
+likelihood<-function(theta){
+  n<-length(dtfr$HomeTeam)
+  alpha2<-c(theta[1:(tn-1)],1.475)
+  beta2<- -theta[(tn):((2*tn)-1)]
+  gamma2<-theta[(2*tn)]
+  value<-0
+  for (i in 1:n){
+    teami <- which(names==dtfr$HomeTeam[i]) #selecting home team
+    teamj <- which(names==dtfr$AwayTeam[i]) #selecting away team
+    x<- dtfr$HomeGoals[i]
+    y<- dtfr$AwayGoals[i]
+    alamda<-exp(alpha2[teami]+beta2[teamj]+gamma2)
+    amu<-exp(alpha2[teamj]+beta2[teami])
+    first<- -(alamda+amu)
+    lognumerator <- (x*log(alamda)) + (y*log(amu))
+    logdenominator <- lfactorial(x)+lfactorial(y)
+    singleprob<-(first+lognumerator)-logdenominator
+    value<-value+(singleprob)
+  }
+  return(value)
+}
+
+```
+Here we optimise the log-likelihood function and find the hessian matrix.
+```{r}
+alphaq<-c(rep(1,(tn-1)))
+betaq<-c(rep(1,tn))
+gammaq<-0.2
+lowlim<-c(rep(-100,40))
+strengthDH<-optim(theta <- c(alphaq,betaq,gammaq), likelihood ,method="L-BFGS-B",lower=lowlim, control=list(fnscale=-1),hessian=TRUE)
+strengthDH
+```
+
+Here we find the Fisher-information using the hessian matrix. We then find our variance by taking the square root of the diagonal. We then use these values to find our confidence intervals.
+
+```{r}
+fisher_info<-solve(-strengthDH$hessian)
+prop_sigma<-sqrt(diag(fisher_info))
+upper<-strengthDH$par+1.96*prop_sigma
+lower<-strengthDH$par-1.96*prop_sigma
+interval<-(data.frame(Parameter=namesb,value=strengthDH$par, upper=upper, lower=lower, True=c(Talpha,beta,gamma)))
+alphaCI<-interval[1:(tn-1),]
+betaCI<-interval[tn:((2*tn)-1),]
+gammaCI<-interval[((2*tn)),]
+```
+
+We now print our CI for our attack strengths,defense strenghts and finally home advantage constant. We can clearly see that the true value for every statistical parameter is contained in its respective confidence-interval.
+
+```{r}
+alphaCI
+```
+
+```{r}
+betaCI
+```
+
+```{r}
+gammaCI
+```
